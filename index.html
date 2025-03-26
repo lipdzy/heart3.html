@@ -324,11 +324,12 @@
         </div>
         
         <h4 style="margin-top: 15px; margin-bottom: 10px; color: #fdfdfd;">Sincronização</h4>
-        <label for="config-id" style="display: block; margin-bottom: 5px;">ID de Configuração:</label>
-        <input type="text" id="config-id" class="config-id-input" placeholder="Digite um ID único para sua configuração">
+        <label for="config-id" style="display: block; margin-bottom: 5px;">ID de Configuração (gerado automaticamente):</label>
+        <input type="text" id="config-id" class="config-id-input" placeholder="ID único para sua configuração" readonly>
         <div style="display: flex; gap: 10px; margin-top: 10px;">
             <button class="sync-button" onclick="saveConfigToCloud()">Salvar na Nuvem</button>
             <button class="sync-button" onclick="loadConfigFromCloud()">Carregar da Nuvem</button>
+            <button class="sync-button" onclick="generateNewId()">Gerar Novo ID</button>
         </div>
         
         <button class="btn" style="margin-top: 10px;" onclick="saveSettings()">Salvar Configurações</button>
@@ -431,6 +432,49 @@
         let relationshipStartDate = new Date(2022, 0, 1); // Padrão: 1 de janeiro de 2022
         let configId = null;
         let lastSyncTime = null;
+
+        // Função para gerar um ID aleatório único
+        function generateUniqueId() {
+            // Gera um ID baseado em timestamp + número aleatório
+            const timestamp = new Date().getTime();
+            const randomPart = Math.floor(Math.random() * 10000);
+            return `love-${timestamp}-${randomPart}`;
+        }
+
+        // Função para inicializar o ID de configuração se não existir
+        function initializeConfigId() {
+            // Verificar se já existe um ID salvo
+            const savedConfigId = localStorage.getItem('love_config_id');
+            
+            if (!savedConfigId) {
+                // Gerar um novo ID e salvá-lo
+                const newId = generateUniqueId();
+                localStorage.setItem('love_config_id', newId);
+                configId = newId;
+                
+                // Atualizar o campo de ID no formulário se estiver visível
+                const configIdInput = document.getElementById('config-id');
+                if (configIdInput) {
+                    configIdInput.value = newId;
+                }
+                
+                console.log("Novo ID de configuração gerado:", newId);
+            } else {
+                configId = savedConfigId;
+            }
+        }
+
+        // Função para gerar um novo ID quando solicitado pelo usuário
+        function generateNewId() {
+            if (confirm("Gerar um novo ID irá desconectar esta configuração da anterior. Continuar?")) {
+                const newId = generateUniqueId();
+                localStorage.setItem('love_config_id', newId);
+                configId = newId;
+                document.getElementById('config-id').value = newId;
+                updateSyncStatus('Novo ID gerado. Alterações não sincronizadas.');
+                alert("Novo ID gerado com sucesso!");
+            }
+        }
 
         // Função para mostrar uma página específica
         function showPage(pageNumber) {
@@ -556,10 +600,8 @@
             }
             
             // Carregar ID de configuração
-            const savedConfigId = localStorage.getItem('love_config_id');
-            if (savedConfigId) {
-                document.getElementById('config-id').value = savedConfigId;
-                configId = savedConfigId;
+            if (configId) {
+                document.getElementById('config-id').value = configId;
             }
         }
 
@@ -584,13 +626,6 @@
             if (declarationText) {
                 document.getElementById('declaration').textContent = declarationText;
                 localStorage.setItem('love_declaration', declarationText);
-            }
-            
-            // Salvar ID de configuração
-            const newConfigId = document.getElementById('config-id').value;
-            if (newConfigId) {
-                configId = newConfigId;
-                localStorage.setItem('love_config_id', newConfigId);
             }
 
             // Fechar painel
@@ -621,12 +656,6 @@
             const declarationText = localStorage.getItem('love_declaration');
             if (declarationText) {
                 document.getElementById('declaration').textContent = declarationText;
-            }
-            
-            // Carregar ID de configuração
-            const savedConfigId = localStorage.getItem('love_config_id');
-            if (savedConfigId) {
-                configId = savedConfigId;
             }
             
             // Carregar última página visitada
@@ -665,8 +694,10 @@
         // Função para salvar configuração na nuvem
         async function saveConfigToCloud() {
             if (!configId) {
-                alert("Por favor, defina um ID de configuração único antes de sincronizar.");
-                return;
+                // Gerar um ID automaticamente se não existir
+                configId = generateUniqueId();
+                localStorage.setItem('love_config_id', configId);
+                document.getElementById('config-id').value = configId;
             }
             
             updateSyncStatus('Sincronizando...');
@@ -714,323 +745,227 @@
                 console.error("Erro ao sincronizar: ", error);
                 updateSyncStatus('Erro na sincronização');
                 
-                // Alternativa: usar localStorage para simular sincronização entre dispositivos
-                simulateCloudSync();
+                // Alternativa: usar localStorage
+                alert("Não foi possível salvar na nuvem. Suas configurações estão salvas localmente.");
             }
-        }
-        
-        // Função para simular sincronização na nuvem usando localStorage
-        function simulateCloudSync() {
-            if (!configId) {
-                alert("Por favor, defina um ID de configuração único antes de sincronizar.");
-                return;
-            }
-            
-            // Coletar todos os dados para sincronizar
-            const configData = {
-                id: configId,
-                spotify_url: localStorage.getItem('love_spotify_url'),
-                relationship_date: localStorage.getItem('love_relationship_date'),
-                declaration: localStorage.getItem('love_declaration'),
-                photo1: localStorage.getItem('love_character-photo1'),
-                photo2: localStorage.getItem('love_couple-photo'),
-                photo3: localStorage.getItem('love_character-photo2'),
-                timestamp: new Date().toISOString()
-            };
-            
-            // Salvar no localStorage com um prefixo especial
-            localStorage.setItem(`love_cloud_${configId}`, JSON.stringify(configData));
-            
-            // Atualizar a data da última sincronização
-            lastSyncTime = new Date();
-            localStorage.setItem('love_last_sync', lastSyncTime.toISOString());
-            
-            updateSyncStatus('Última sincronização: ' + formatDate(lastSyncTime));
-            alert("Configuração salva localmente com sucesso! (Modo offline)");
         }
 
         // Função para carregar configuração da nuvem
         async function loadConfigFromCloud() {
-            const inputConfigId = document.getElementById('config-id').value;
-            if (!inputConfigId) {
-                alert("Por favor, digite o ID de configuração para carregar.");
+            const inputId = document.getElementById('config-id').value.trim();
+            
+            if (!inputId) {
+                alert("Por favor, insira um ID de configuração válido.");
                 return;
             }
             
-            updateSyncStatus('Carregando configuração...');
+            updateSyncStatus('Carregando da nuvem...');
             
             try {
-                // Tentar carregar da API
-                const binId = localStorage.getItem('love_bin_id');
+                // Tentar carregar os dados do jsonbin.io
+                const response = await fetch(`https://api.jsonbin.io/v3/b/latest`, {
+                    method: 'GET',
+                    headers: {
+                        'X-Master-Key': '$2a$10$YourSecretKeyHere', // Substitua por sua chave
+                        'X-Bin-Name': `love-config-${inputId}`
+                    }
+                });
                 
-                if (binId) {
-                    const response = await fetch(`https://api.jsonbin.io/v3/b/${binId}/latest`, {
-                        headers: {
-                            'X-Master-Key': '$2a$10$YourSecretKeyHere' // Substitua por sua chave
-                        }
-                    });
-                    
-                    if (!response.ok) {
-                        throw new Error('Falha ao carregar da nuvem');
-                    }
-                    
-                    const data = await response.json();
-                    const configData = data.record;
-                    
-                    // Verificar se o ID corresponde
-                    if (configData.id === inputConfigId) {
-                        applyLoadedConfig(configData);
-                        alert("Configuração carregada da nuvem com sucesso!");
-                    } else {
-                        throw new Error('ID de configuração não corresponde');
-                    }
-                } else {
-                    throw new Error('Nenhum dado na nuvem encontrado');
+                if (!response.ok) {
+                    throw new Error('Configuração não encontrada');
                 }
+                
+                const data = await response.json();
+                const configData = data.record;
+                
+                // Verificar se os dados são válidos
+                if (!configData || !configData.id) {
+                    throw new Error('Dados inválidos');
+                }
+                
+                // Atualizar o ID de configuração local
+                configId = configData.id;
+                localStorage.setItem('love_config_id', configId);
+                document.getElementById('config-id').value = configId;
+                
+                // Atualizar todas as configurações
+                if (configData.spotify_url) {
+                    localStorage.setItem('love_spotify_url', configData.spotify_url);
+                    document.getElementById('spotify-iframe').src = configData.spotify_url;
+                    document.getElementById('spotify-url').value = configData.spotify_url;
+                }
+                
+                if (configData.relationship_date) {
+                    localStorage.setItem('love_relationship_date', configData.relationship_date);
+                    relationshipStartDate = new Date(configData.relationship_date);
+                    document.getElementById('relationship-date').value = configData.relationship_date;
+                }
+                
+                if (configData.declaration) {
+                    localStorage.setItem('love_declaration', configData.declaration);
+                    document.getElementById('declaration').textContent = configData.declaration;
+                    document.getElementById('declaration-text').value = configData.declaration;
+                }
+                
+                // Atualizar imagens
+                if (configData.photo1) {
+                    localStorage.setItem('love_character-photo1', configData.photo1);
+                    document.getElementById('character-photo1').src = configData.photo1;
+                }
+                
+                if (configData.photo2) {
+                    localStorage.setItem('love_couple-photo', configData.photo2);
+                    document.getElementById('couple-photo').src = configData.photo2;
+                }
+                
+                if (configData.photo3) {
+                    localStorage.setItem('love_character-photo2', configData.photo3);
+                    document.getElementById('character-photo2').src = configData.photo3;
+                }
+                
+                // Salvar o ID do bin para futuras atualizações
+                if (data.metadata && data.metadata.id) {
+                    localStorage.setItem('love_bin_id', data.metadata.id);
+                }
+                
+                // Atualizar a data da última sincronização
+                lastSyncTime = new Date();
+                localStorage.setItem('love_last_sync', lastSyncTime.toISOString());
+                
+                updateSyncStatus('Última sincronização: ' + formatDate(lastSyncTime));
+                alert("Configuração carregada com sucesso!");
             } catch (error) {
                 console.error("Erro ao carregar da nuvem: ", error);
-                
-                // Tentar carregar do localStorage (modo offline)
-                loadConfigFromLocalStorage(inputConfigId);
+                updateSyncStatus('Erro ao carregar da nuvem');
+                alert("Não foi possível carregar a configuração. Verifique o ID e tente novamente.");
             }
-        }
-        
-        // Função para carregar configuração do localStorage
-        function loadConfigFromLocalStorage(inputConfigId) {
-            try {
-                const savedConfig = localStorage.getItem(`love_cloud_${inputConfigId}`);
-                
-                if (savedConfig) {
-                    const configData = JSON.parse(savedConfig);
-                    applyLoadedConfig(configData);
-                    alert("Configuração carregada localmente com sucesso! (Modo offline)");
-                } else {
-                    alert("Nenhuma configuração encontrada com este ID.");
-                    updateSyncStatus('Erro ao carregar configuração');
-                }
-            } catch (error) {
-                console.error("Erro ao carregar configuração local: ", error);
-                alert("Erro ao carregar configuração local.");
-                updateSyncStatus('Erro ao carregar configuração');
-            }
-        }
-        
-        // Função para aplicar a configuração carregada
-        function applyLoadedConfig(configData) {
-            // Aplicar configurações básicas
-            if (configData.spotify_url) {
-                localStorage.setItem('love_spotify_url', configData.spotify_url);
-                document.getElementById('spotify-iframe').src = configData.spotify_url;
-                document.getElementById('spotify-url').value = configData.spotify_url;
-            }
-            
-            if (configData.relationship_date) {
-                localStorage.setItem('love_relationship_date', configData.relationship_date);
-                relationshipStartDate = new Date(configData.relationship_date);
-                document.getElementById('relationship-date').value = configData.relationship_date;
-            }
-            
-            if (configData.declaration) {
-                localStorage.setItem('love_declaration', configData.declaration);
-                document.getElementById('declaration').textContent = configData.declaration;
-                document.getElementById('declaration-text').value = configData.declaration;
-            }
-            
-            // Aplicar fotos
-            if (configData.photo1) {
-                localStorage.setItem('love_character-photo1', configData.photo1);
-                document.getElementById('character-photo1').src = configData.photo1;
-            }
-            
-            if (configData.photo2) {
-                localStorage.setItem('love_couple-photo', configData.photo2);
-                document.getElementById('couple-photo').src = configData.photo2;
-            }
-            
-            if (configData.photo3) {
-                localStorage.setItem('love_character-photo2', configData.photo3);
-                document.getElementById('character-photo2').src = configData.photo3;
-            }
-            
-            // Salvar o ID de configuração
-            configId = configData.id;
-            localStorage.setItem('love_config_id', configId);
-            document.getElementById('config-id').value = configId;
-            
-            // Atualizar a data da última sincronização
-            lastSyncTime = new Date();
-            localStorage.setItem('love_last_sync', lastSyncTime.toISOString());
-            
-            updateSyncStatus('Última sincronização: ' + formatDate(lastSyncTime));
         }
 
-        // Criar estrelas de fundo
+        // Função para criar estrelas de fundo
         function createStars() {
             const starsContainer = document.getElementById('stars');
-            const numberOfStars = 200;
-
-            for (let i = 0; i < numberOfStars; i++) {
+            const starCount = 100;
+            
+            for (let i = 0; i < starCount; i++) {
                 const star = document.createElement('div');
                 star.classList.add('star');
-
-                // Tamanho aleatório para as estrelas
+                
+                // Tamanho aleatório
                 const size = Math.random() * 3;
                 star.style.width = size + 'px';
                 star.style.height = size + 'px';
-
+                
                 // Posição aleatória
-                star.style.left = Math.random() * 100 + '%';
-                star.style.top = Math.random() * 100 + '%';
-
+                star.style.left = Math.random() * 100 + 'vw';
+                star.style.top = Math.random() * 100 + 'vh';
+                
                 // Brilho aleatório
-                star.style.opacity = Math.random() * 0.8 + 0.2;
-
+                star.style.opacity = Math.random();
+                
                 starsContainer.appendChild(star);
             }
         }
 
-        // Criar corações flutuantes
-        function createHearts() {
-            // Função mantida, mas não cria nenhum coração
-            return;
+        // Função para criar corações flutuantes
+        function createFloatingHearts() {
+            const body = document.body;
+            const heartCount = 20;
+            
+            for (let i = 0; i < heartCount; i++) {
+                const heart = document.createElement('div');
+                heart.classList.add('heart');
+                heart.innerHTML = '❤';
+                
+                // Tamanho aleatório
+                const size = Math.random() * 20 + 10;
+                heart.style.fontSize = size + 'px';
+                
+                // Posição aleatória
+                heart.style.left = Math.random() * 100 + 'vw';
+                heart.style.top = Math.random() * 100 + 'vh';
+                
+                // Animação aleatória
+                heart.style.animationDuration = (Math.random() * 10 + 5) + 's';
+                heart.style.animationDelay = (Math.random() * 5) + 's';
+                
+                body.appendChild(heart);
+            }
         }
 
-        // Criar meteoros
+        // Função para criar meteoros
         function createMeteors() {
             setInterval(() => {
                 const meteor = document.createElement('div');
                 meteor.classList.add('meteor');
-
+                
                 // Posição inicial aleatória
-                const startX = Math.random() * window.innerWidth + window.innerWidth/2;
-                const startY = Math.random() * window.innerHeight/2;
+                const startX = Math.random() * window.innerWidth;
                 meteor.style.left = startX + 'px';
-                meteor.style.top = startY + 'px';
-
+                
                 // Tamanho aleatório
-                const size = Math.random() * 150 + 50;
-                meteor.style.width = size + 'px';
-
-                // Duração aleatória
+                const width = Math.random() * 150 + 50;
+                meteor.style.width = width + 'px';
+                
+                // Velocidade aleatória
                 const duration = Math.random() * 2 + 1;
                 meteor.style.animationDuration = duration + 's';
-
+                
                 document.body.appendChild(meteor);
-
+                
                 // Remover o meteoro após a animação
                 setTimeout(() => {
                     meteor.remove();
                 }, duration * 1000);
-            }, 1000);
+            }, 3000);
         }
 
-        // Calcular tempo de namoro
-        function calculateRelationshipTime() {
-            function updateTimer() {
-                const now = new Date();
-                const diff = now - relationshipStartDate;
-
-                // Cálculo básico de todas as unidades
-                const seconds = Math.floor(diff / 1000);
-                const minutes = Math.floor(seconds / 60);
-                const hours = Math.floor(minutes / 60);
-                const days = Math.floor(hours / 24);
-                const months = Math.floor(days / 30.44); // Média de dias por mês
-                const years = Math.floor(days / 365.25); // Considerando anos bissextos
-
-                // Cálculo correto dos valores restantes
-                const remainingMonths = Math.floor(months % 12);
-                const totalDaysInMonths = years * 365.25 + remainingMonths * 30.44;
-                const remainingDays = Math.floor(days - totalDaysInMonths);
-                const remainingWeeks = Math.floor(remainingDays / 7);
-                const remainingDaysAfterWeeks = remainingDays % 7;
-                const remainingHours = hours % 24;
-                const remainingMinutes = minutes % 60;
-                const remainingSeconds = seconds % 60;
-
-                document.getElementById('years').textContent = years + (years === 1 ? ' ano' : ' anos');
-                document.getElementById('months').textContent = remainingMonths + (remainingMonths === 1 ? ' mês' : ' meses');
-                document.getElementById('weeks').textContent = remainingWeeks + (remainingWeeks === 1 ? ' semana' : ' semanas');
-                document.getElementById('days').textContent = remainingDaysAfterWeeks + (remainingDaysAfterWeeks === 1 ? ' dia' : ' dias');
-                document.getElementById('hours').textContent = remainingHours + (remainingHours === 1 ? ' hora' : ' horas');
-                document.getElementById('minutes').textContent = remainingMinutes + ' min';
-                document.getElementById('seconds').textContent = remainingSeconds + (remainingSeconds === 1 ? ' segundo' : ' segundos');
-            }
-
-            // Atualizar a cada segundo
-            setInterval(updateTimer, 1000);
-            updateTimer(); // Iniciar imediatamente
-        }
-
-        // Verificar se o localStorage está disponível
-        function checkLocalStorage() {
-            try {
-                localStorage.setItem('test', 'test');
-                localStorage.removeItem('test');
-                return true;
-            } catch (e) {
-                alert("Seu navegador não suporta armazenamento local ou está em modo privado. Algumas funcionalidades podem não funcionar corretamente.");
-                return false;
-            }
-        }
-        
-        // Verificar se há uma versão mais recente da configuração
-        async function checkForUpdates() {
-            if (!configId) return;
+        // Função para atualizar o contador de tempo
+        function updateTimer() {
+            const now = new Date();
+            const diff = now - relationshipStartDate;
             
-            try {
-                // Verificar se há uma versão mais recente no localStorage
-                const savedConfig = localStorage.getItem(`love_cloud_${configId}`);
-                
-                if (savedConfig) {
-                    const configData = JSON.parse(savedConfig);
-                    const savedTimestamp = new Date(configData.timestamp);
-                    
-                    // Se a configuração salva for mais recente que a última sincronização
-                    if (!lastSyncTime || savedTimestamp > lastSyncTime) {
-                        if (confirm("Existe uma configuração mais recente disponível. Deseja carregá-la?")) {
-                            applyLoadedConfig(configData);
-                        }
-                    }
-                }
-                
-                // Também poderia verificar na nuvem, mas isso exigiria uma API real
-            } catch (error) {
-                console.error("Erro ao verificar atualizações: ", error);
-            }
-        }
-        
-        // Função para salvar automaticamente a configuração atual
-        function setupAutoSave() {
-            // Salvar a cada 30 segundos se houver alterações
-            setInterval(() => {
-                if (configId) {
-                    simulateCloudSync();
-                }
-            }, 30000);
+            // Converter milissegundos para unidades de tempo
+            const seconds = Math.floor(diff / 1000);
+            const minutes = Math.floor(seconds / 60);
+            const hours = Math.floor(minutes / 60);
+            const days = Math.floor(hours / 24);
+            const weeks = Math.floor(days / 7);
+            const months = Math.floor(days / 30.44); // Média de dias por mês
+            const years = Math.floor(days / 365.25); // Considerando anos bissextos
+            
+            // Atualizar elementos HTML
+            document.getElementById('years').textContent = years + (years === 1 ? ' ano' : ' anos');
+            document.getElementById('months').textContent = months + (months === 1 ? ' mês' : ' meses');
+            document.getElementById('weeks').textContent = weeks + (weeks === 1 ? ' semana' : ' semanas');
+            document.getElementById('days').textContent = days + (days === 1 ? ' dia' : ' dias');
+            document.getElementById('hours').textContent = (hours % 24) + (hours % 24 === 1 ? ' hora' : ' horas');
+            document.getElementById('minutes').textContent = (minutes % 60) + (minutes % 60 === 1 ? ' minuto' : ' minutos');
+            document.getElementById('seconds').textContent = (seconds % 60) + (seconds % 60 === 1 ? ' segundo' : ' segundos');
         }
 
-        // Inicializar tudo quando a página carregar
-        window.onload = function() {
-            // Verificar se o localStorage está disponível
-            if (checkLocalStorage()) {
-                // Carregar configurações salvas
-                loadSettingsFromStorage();
-                
-                // Carregar imagens salvas
-                loadImagesFromStorage();
-                
-                // Verificar se há atualizações
-                checkForUpdates();
-                
-                // Configurar salvamento automático
-                setupAutoSave();
-            }
+        // Inicialização quando o documento estiver pronto
+        document.addEventListener('DOMContentLoaded', function() {
+            // Inicializar o ID de configuração
+            initializeConfigId();
             
+            // Criar elementos visuais
             createStars();
+            createFloatingHearts();
             createMeteors();
-            calculateRelationshipTime();
-        };
+            
+            // Carregar configurações salvas
+            loadSettingsFromStorage();
+            loadImagesFromStorage();
+            
+            // Iniciar o contador de tempo
+            updateTimer();
+            setInterval(updateTimer, 1000);
+            
+            // Adicionar ícones aos botões de upload
+            document.querySelectorAll('.file-upload-icon').forEach(icon => {
+                icon.innerHTML = '';
+            });
+        });
     </script>
 </body>
-</html>
+</html
